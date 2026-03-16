@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SoundSearch — Nhạc cụ Bộ dây</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+  <!-- ══ BACKGROUND EFFECTS ══ -->
+  <div class="bg-grid"></div>
+  <div class="bg-glow bg-glow--tl"></div>
+  <div class="bg-glow bg-glow--br"></div>
+  <canvas id="bg-noise" class="bg-noise"></canvas>
+
+  <!-- ══ HEADER ══ -->
+  <header class="header">
+    <div class="header__inner">
+      <div class="logo">
+        <span class="logo__icon">◈</span>
+        <span class="logo__text">SoundSearch</span>
+        <span class="logo__tag">BETA</span>
+      </div>
+      <nav class="nav">
+        <button class="nav__btn active" data-tab="home">
+          <span class="nav__icon">⬡</span> Trang chủ
+        </button>
+        <button class="nav__btn" data-tab="search">
+          <span class="nav__icon">◎</span> Tìm kiếm
+          <span class="nav__badge" id="result-badge" style="display:none">0</span>
+        </button>
+      </nav>
+      <div class="header__meta">
+        <span class="status-dot"></span>
+        <span id="db-stat">DB: 580 files · 8 nhạc cụ</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ══ MAIN CONTENT ══ -->
+  <main class="main">
+
+    <!-- ════════════ TAB: HOME ════════════ -->
+    <section class="tab-panel active" id="tab-home">
+
+      <!-- Page title -->
+      <div class="page-header">
+        <h1 class="page-title">Phân tích & Trích xuất <em>Đặc trưng</em></h1>
+        <p class="page-sub">Upload file âm thanh nhạc cụ bộ dây → hệ thống phân tích 44 đặc trưng → tìm kiếm tương đồng</p>
+      </div>
+
+      <!-- Top grid: Upload | Pipeline -->
+      <div class="grid-2">
+
+        <!-- ── Upload Card ── -->
+        <div class="card">
+          <div class="card__head">
+            <span class="card__icon" style="color:var(--cyan)">◈</span>
+            <span class="card__title">Upload File Âm thanh</span>
+          </div>
+
+          <!-- Drop zone -->
+          <div class="dropzone" id="dropzone">
+            <div class="dropzone__inner">
+              <div class="dropzone__icon">🎼</div>
+              <div class="dropzone__label">Kéo thả file vào đây</div>
+              <div class="dropzone__sub">hoặc click để chọn file</div>
+              <div class="dropzone__formats">.wav · .mp3 · .flac · .ogg · .aif</div>
+            </div>
+            <input type="file" id="file-input" accept=".wav,.mp3,.flac,.ogg,.aif" hidden />
+          </div>
+
+          <!-- File info (hidden until file chosen) -->
+          <div class="file-info" id="file-info" style="display:none">
+            <div class="file-info__icon">🎵</div>
+            <div class="file-info__body">
+              <div class="file-info__name" id="file-name">—</div>
+              <div class="file-info__meta" id="file-meta">—</div>
+            </div>
+            <button class="file-info__remove" id="file-remove" title="Xóa">✕</button>
+          </div>
+
+          <!-- Waveform canvas (real-time from Web Audio API) -->
+          <div class="waveform-wrap" id="waveform-wrap" style="display:none">
+            <div class="waveform-label">Biểu đồ biên độ âm thanh (Waveform)</div>
+            <canvas id="waveform-canvas" class="waveform-canvas" width="600" height="120"></canvas>
+            <div class="waveform-ruler" id="waveform-ruler"></div>
+          </div>
+
+          <!-- Spectrogram canvas -->
+          <div class="waveform-wrap" id="spectrogram-wrap" style="display:none">
+            <div class="waveform-label">Spectrogram (Thời gian × Tần số)</div>
+            <canvas id="spectrogram-canvas" class="waveform-canvas" width="600" height="100"></canvas>
+          </div>
+
+          <!-- Analyze button -->
+          <button class="btn-analyze" id="btn-analyze" disabled>
+            <span class="btn-analyze__icon">◎</span>
+            <span id="btn-analyze-text">Phân tích Đặc trưng</span>
+            <span class="btn-analyze__arrow">→</span>
+          </button>
+        </div>
+
+        <!-- ── Pipeline Card ── -->
+        <div class="card">
+          <div class="card__head">
+            <span class="card__icon" style="color:var(--amber)">◈</span>
+            <span class="card__title">Kết quả Trung gian — Pipeline</span>
+          </div>
+
+          <ol class="pipeline" id="pipeline">
+            <li class="pipeline__step" data-step="1">
+              <div class="pipeline__dot">1</div>
+              <div class="pipeline__info">
+                <div class="pipeline__name">Load Audio</div>
+                <div class="pipeline__detail">22050Hz · Mono · decode buffer</div>
+              </div>
+            </li>
+            <li class="pipeline__step" data-step="2">
+              <div class="pipeline__dot">2</div>
+              <div class="pipeline__info">
+                <div class="pipeline__name">Trim Silence</div>
+                <div class="pipeline__detail">librosa.effects.trim(top_db=20)</div>
+              </div>
+            </li>
+            <li class="pipeline__step" data-step="3">
+              <div class="pipeline__dot">3</div>
+              <div class="pipeline__info">
+                <div class="pipeline__name">Extract Features</div>
+                <div class="pipeline__detail">Energy · ZCR · MFCC · Spectral · Chroma</div>
+              </div>
+            </li>
+            <li class="pipeline__step" data-step="4">
+              <div class="pipeline__dot">4</div>
+              <div class="pipeline__info">
+                <div class="pipeline__name">Normalize Vector</div>
+                <div class="pipeline__detail">StandardScaler · L2-norm → 44D</div>
+              </div>
+            </li>
+            <li class="pipeline__step" data-step="5">
+              <div class="pipeline__dot">5</div>
+              <div class="pipeline__info">
+                <div class="pipeline__name">pgvector Search</div>
+                <div class="pipeline__detail">Cosine distance · HNSW index</div>
+              </div>
+            </li>
+          </ol>
+
+          <!-- Console log -->
+          <div class="console" id="console">
+            <div class="console__header">
+              <span class="console__dot red"></span>
+              <span class="console__dot yellow"></span>
+              <span class="console__dot green"></span>
+              <span style="margin-left:8px;font-size:10px;color:var(--muted)">pipeline.log</span>
+            </div>
+            <div class="console__body" id="console-body">
+              <span class="console__idle">Chờ file upload...</span>
+            </div>
+          </div>
+        </div>
+      </div><!-- /grid-2 -->
+
+      <!-- Features Section (hiện sau khi phân tích) -->
+      <div class="features-section" id="features-section" style="display:none">
+
+        <div class="section-divider">
+          <span>Đặc trưng Trích xuất — 44 Chiều</span>
+        </div>
+
+        <!-- Feature cards -->
+        <div class="grid-3" id="feature-cards">
+          <!-- Filled by JS -->
+        </div>
+
+        <!-- Vector bar chart -->
+        <div class="card" style="margin-top:16px">
+          <div class="card__head">
+            <span class="card__icon" style="color:var(--green)">◈</span>
+            <span class="card__title">Feature Vector — 44D Visualization</span>
+            <span class="card__badge">L2-normalized</span>
+          </div>
+          <canvas id="vector-chart" class="vector-chart" width="1000" height="80"></canvas>
+          <div class="vector-labels">
+            <span style="color:var(--cyan)">energy · zcr · silence</span>
+            <span style="color:var(--purple)">MFCC mean ×13</span>
+            <span style="color:var(--purple)">MFCC std ×13</span>
+            <span style="color:var(--amber)">centroid · bw · rolloff</span>
+            <span style="color:var(--pink)">chroma ×12</span>
+          </div>
+          <div class="vector-raw" id="vector-raw">—</div>
+        </div>
+
+        <!-- MFCC heatmap -->
+        <div class="card" style="margin-top:16px">
+          <div class="card__head">
+            <span class="card__icon" style="color:var(--purple)">◈</span>
+            <span class="card__title">MFCC Heatmap (13 hệ số × time frames)</span>
+          </div>
+          <canvas id="mfcc-chart" class="mfcc-chart" width="1000" height="80"></canvas>
+          <div class="mfcc-axis">
+            <span>MFCC-1</span><span>MFCC-4</span><span>MFCC-7</span>
+            <span>MFCC-10</span><span>MFCC-13</span>
+          </div>
+        </div>
+
+        <!-- CTA to search -->
+        <div class="cta-search" id="cta-search">
+          <div class="cta-search__text">
+            <strong>Phân tích hoàn tất!</strong> Chuyển sang trang Tìm kiếm để xem 10 bài tương đồng nhất.
+          </div>
+          <button class="btn-goto-search" id="btn-goto-search">
+            Xem Top 10 kết quả →
+          </button>
+        </div>
+      </div>
+
+    </section><!-- /tab-home -->
+
+    <!-- ════════════ TAB: SEARCH ════════════ -->
+    <section class="tab-panel" id="tab-search">
+
+      <div class="page-header">
+        <h1 class="page-title">Top 10 Kết quả <em>Tương đồng</em></h1>
+        <p class="page-sub" id="search-meta">Chưa có kết quả — hãy phân tích file âm thanh ở Trang chủ trước</p>
+      </div>
+
+      <!-- Empty state -->
+      <div class="empty-state" id="empty-state">
+        <div class="empty-state__icon">◎</div>
+        <div class="empty-state__text">Chưa có dữ liệu tìm kiếm</div>
+        <button class="btn-back" id="btn-back-home">← Quay lại Trang chủ</button>
+      </div>
+
+      <!-- Results layout -->
+      <div class="search-layout" id="search-layout" style="display:none">
+
+        <!-- Left: query summary -->
+        <div class="query-card card">
+          <div class="card__head">
+            <span class="card__icon" style="color:var(--cyan)">⬡</span>
+            <span class="card__title">File truy vấn</span>
+          </div>
+          <div class="query-info">
+            <div class="query-filename" id="q-filename">—</div>
+            <canvas id="q-waveform" class="q-waveform" width="340" height="60"></canvas>
+            <div class="query-stats" id="q-stats">—</div>
+          </div>
+          <div class="api-pill">
+            <span class="api-pill__method">GET</span>
+            <span class="api-pill__url" id="api-url">/api/search?audio_id=—</span>
+          </div>
+          <div class="query-features" id="q-features">
+            <!-- mini feature pills -->
+          </div>
+        </div>
+
+        <!-- Right: results list -->
+        <div class="results-col">
+          <div class="results-toolbar">
+            <span class="results-count" id="results-count">10 kết quả</span>
+            <div class="results-sort">
+              <span style="font-size:11px;color:var(--muted)">Sắp xếp:</span>
+              <button class="sort-btn active" data-sort="similarity">Tương đồng ↓</button>
+              <button class="sort-btn" data-sort="duration">Thời lượng</button>
+            </div>
+          </div>
+
+          <div class="results-list" id="results-list">
+            <!-- Filled by JS -->
+          </div>
+        </div>
+
+      </div><!-- /search-layout -->
+
+      <!-- Similarity chart (full width) -->
+      <div class="card" id="sim-chart-card" style="display:none;margin-top:20px">
+        <div class="card__head">
+          <span class="card__icon" style="color:var(--cyan)">◈</span>
+          <span class="card__title">Biểu đồ Cosine Similarity — Top 10</span>
+          <span class="card__badge" id="search-time-badge">—</span>
+        </div>
+        <canvas id="sim-chart" class="sim-chart" width="1000" height="140"></canvas>
+        <div class="sim-chart-labels" id="sim-chart-labels"></div>
+      </div>
+
+    </section><!-- /tab-search -->
+
+  </main>
+
+  <script src="main.js"></script>
+</body>
+</html>
