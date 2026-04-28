@@ -1,0 +1,19 @@
+# ============================================================
+# Dependencies cho dự án String Instrument Retrieval
+# ============================================================
+
+# Audio processing
+librosa==0.10.2
+soundfile==0.12.1
+numpy>=1.24.0
+
+# Database
+psycopg2-binary==2.9.9
+
+# Web framework
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+python-multipart==0.0.9
+
+# Utilities
+pandas==2.2.0

@@ -1,0 +1,9 @@
+Xây dựng hệ CSDL lưu trữ và tìm kiếm tiếng nhạc cụ thuộc bộ dây.
+1.Hãy xây dựng/sưu tầm một bộ dữ liệu gồm ít nhất 500 files âm thanh 
+về tiếng nhạc cụ đơn tấu thuộc bộ dây, các file có độ dài phù hợp để trích xuất các đặc trưng âm thanh (SV tùy chọn định dạng file âm thanh).
+2.Hãy xây dựng một bộ thuộc tính để nhận diện tiếng nhạc cụ của các file âm thanh khác nhau từ bộ dữ liệu đã thu thập (gồm các đặc trưng giúp tìm kiếm sự tương đồng giữa các tiếng nhạc cụ, và các đặc trưng thể hiện sự khác nhau giữa các tiếng nhạc cụ). Trình bày cụ thể về lý do lựa chọn và giá trị thông tin của các thuộc tính này.
+3. Xây dựng hệ CSDL để quản trị các siêu dữ liệu đã lựa chọn, và xây dựng cơ chế tìm kiếm tiếng nhạc cụ dựa trên các siêu dữ liệu đó.
+4. Xây dựng hệ thống tìm kiếm tiếng nhạc cụ thuộc bộ dây với đầu vào là một file âm thanh mới của một nhạc cụ nào đó (nhạc cụ đã có và không có trong dữ liệu), đầu ra là 5 files giống nhất, xếp thứ tự giảm dần về độ tương đồng với file âm thanh đầu vào.
+a.Trình bày sơ đồ khối của hệ thống và quy trình thực hiện yêu cầu của đề bài.
+b.Trình bày các kết quả trung gian của quá trình tìm kiếm âm thanh nhạc cụ nói trên.
+5.Demo hệ thống và đánh giá kết quả đã đạt được.

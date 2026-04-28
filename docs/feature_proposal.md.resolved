@@ -1,0 +1,159 @@
+# Thiết Kế Bộ Thuộc Tính: "Tương Đồng Thính Giác Cân Bằng" cho TinySOL
+
+## 1. Định Nghĩa Bài Toán
+
+**Câu hỏi hệ thống cần trả lời:** *"File này nghe giống file nào nhất với người nghe bình thường?"*
+
+**Tiêu chí thành công (Test Case cụ thể):**
+- Query: `Viola A#3 ff` → Kết quả mong muốn: `Viola A3/B3 ff` (cùng đàn, gần nốt, cùng lực)
+- Query: `Violoncello C4 pp` → Kết quả mong muốn: `Violoncello C#4/B3 pp` (cùng đàn, gần nốt, cùng lực) — KHÔNG phải Viola C4 pp (khác đàn)
+
+**Đặc điểm Dataset cần khai thác:**
+
+| Thuộc tính | Giá trị | Ý nghĩa thiết kế |
+|:---|:---|:---|
+| Nhạc cụ | Violin, Viola, Violoncello, Contrabass | Cần phân tích đặc trưng hộp cộng hưởng từ nhỏ nhất (Violin) đến lớn nhất (Bass) |
+| Kỹ thuật | 100% `ordinario` | → ZCR, Silence Ratio **đồng nhất**, không cần đo |
+| Dynamics | `pp`, [mf](file:///d:/PTIT/k%C3%AC%202%20n%C4%83m%204/C%C6%A1%20s%E1%BB%9F%20d%E1%BB%AF%20li%E1%BB%87u%20%C4%91a%20ph%C6%B0%C6%A1ng%20ti%E1%BB%87n/CSDLDPT/backend/features/cepstral.py#12-30), [ff](file:///d:/PTIT/k%C3%AC%202%20n%C4%83m%204/C%C6%A1%20s%E1%BB%9F%20d%E1%BB%AF%20li%E1%BB%87u%20%C4%91a%20ph%C6%B0%C6%A1ng%20ti%E1%BB%87n/CSDLDPT/backend/features/spectral.py#26-30) (3 mức) | → Cần 1 thuộc tính bắt cường độ thật |
+| Pitch | C2 → C7 (MIDI 36 → 96) | → Dải rất rộng, cần scale logarithmic (MIDI) |
+| String_id | 1 → 4 | Dây nào được chơi ảnh hưởng đến timbre |
+
+---
+
+## 2. Bốn Trục Nhận Thức Của Người Nghe
+
+Khi một người bình thường nghe 2 tiếng đàn và đánh giá "giống hay không giống", não bộ vô thức xử lý theo 4 trục sau (xếp theo mức độ ưu tiên):
+
+| Ưu tiên | Trục nhận thức | Câu hỏi não bộ đặt ra | Thuộc tính DSP tương ứng |
+|:---:|:---|:---|:---|
+| 🥇 | **Nhạc cụ** (Timbre) | "Đây là Cello hay Viola?" | MFCC Mean |
+| 🥈 | **Cao độ** (Pitch) | "Nốt gì? Gần nốt vừa nghe không?" | F0 (MIDI) |
+| 🥉 | **Cường độ** (Dynamics) | "Mạnh hay nhẹ?" | RMS Mean |
+| 4 | **Sắc thái** (Color) | "Trong trẻo hay đục?" | Spectral Contrast |
+
+---
+
+## 3. Bộ Thuộc Tính Đề Xuất — Bảng Phẫu Thuật
+
+### 3.1. Nguyên tắc chọn lọc (Karpathy Surgical)
+1. Mỗi thuộc tính phải trả lời **một câu hỏi nhận thức duy nhất** mà không thuộc tính nào khác đã trả lời
+2. Nếu 2 thuộc tính có tương quan (correlation) > 0.8 → chỉ giữ 1
+3. Nếu thuộc tính có phương sai ≈ 0 trên toàn dataset → loại bỏ (không phân biệt được gì)
+
+### 3.2. Các thuộc tính được GIỮ LẠI
+
+#### Trục 1: Nhạc Cụ — MFCC Mean C1-C10 (10 chiều)
+
+| Dim | Tên | Vai trò cụ thể |
+|:---:|:---|:---|
+| `[0-9]` | MFCC Mean C1-C10 | **Vân tay âm sắc** của hộp cộng hưởng. C1-C2 = Hình dáng phổ rộng (sáng/tối). C3-C5 = Vùng formant (phân biệt Cello vs Viola). C6-C10 = Chi tiết chất gỗ, cấu trúc bộ dây. |
+
+**Tại sao 10 hệ số?**
+- Bỏ **C0**: C0 = log(energy) → trùng lặp 95% với RMS Mean. Giữ cả hai sẽ cho Dynamics "bỏ phiếu 2 lần" trong phép tính Cosine.
+- Bỏ **C11-C12**: Hệ số DCT bậc rất cao, nắm bắt chi tiết cực mịn của phổ — chủ yếu là nhiễu micro và tiếng nhựa thông, không phải đặc trưng nhạc cụ. Giá trị ≈ 0.00x trên toàn dataset.
+
+#### Trục 2: Cao Độ — F0 Median MIDI (1 chiều, nhân trọng số ×3 → 3 chiều)
+
+| Dim | Tên | Vai trò cụ thể |
+|:---:|:---|:---|
+| `[10-12]` | F0 Median (MIDI) ×3 | **Nốt nhạc.** Chuyển Hz → MIDI bằng `librosa.hz_to_midi` để khoảng cách giữa các semitone đồng đều. Nhân 3 lần để cân bằng sức ảnh hưởng với 10 chiều MFCC. |
+
+**Tại sao nhân ×3?**
+- Với 10 MFCC + 1 F0, Pitch chỉ chiếm 1/21 = 4.7% ảnh hưởng → hệ thống "điếc nốt".
+- Nhân ×3 → Pitch chiếm 3/23 ≈ 13% → cân bằng hợp lý hơn cho thính giác.
+- Kỹ thuật "feature repetition" là phương pháp chuẩn trong MIR khi không muốn thay đổi hàm tính khoảng cách.
+
+#### Trục 3: Cường Độ — RMS Mean (1 chiều)
+
+| Dim | Tên | Vai trò cụ thể |
+|:---:|:---|:---|
+| `[13]` | RMS Mean | **Độ to trung bình**. Đo trực tiếp lực kéo vĩ (pp/mf/ff). Vì đã bỏ `librosa.util.normalize`, giá trị RMS giữ nguyên biên độ thu âm gốc của Ircam. |
+
+**Tại sao không dùng RMS Std (Variance)?**
+- RMS Std đo "độ đều tay kéo vĩ" — Với TinySOL 100% ordinario + thu âm chuẩn, tất cả đều "đều tay". Phương sai thấp, không phân biệt được gì thêm.
+- Người nghe bình thường nhận thức "to hay nhỏ" (RMS Mean) rõ hơn "đều hay không đều" (RMS Std).
+
+#### Trục 4: Sắc Thái — Spectral Contrast B1-B4 (4 chiều)
+
+| Dim | Tên | Vai trò cụ thể |
+|:---:|:---|:---|
+| `[14-17]` | Contrast B1-B4 | **Độ rõ ràng của họa tiết sóng hài.** Đo khoảng cách năng lượng giữa đỉnh hài (peaks) và đáy nhiễu (valleys) ở 4 dải tần thấp → trung. Cello âm vang đầy đặn (contrast cao ở B1-B2), Viola sáng sắc hơn (contrast cao ở B3-B4). |
+
+**Tại sao chỉ 4 band, không phải 5 hay 7?**
+- **B5-B7** (>4kHz → 22kHz): Âm nhạc bộ dây cổ điển gần như không có tín hiệu ở dải siêu cao. Giá trị ngẫu nhiên, gây "rác" trong không gian vector.
+
+#### Trục 5: Kết Cấu — MFCC Std C1-C4 (4 chiều)
+
+| Dim | Tên | Vai trò cụ thể |
+|:---:|:---|:---|
+| `[18-21]` | MFCC Std C1-C4 | **Sự ổn định timbral.** Đo dao động của MFCC trong suốt nốt nhạc. Cùng là Viola nhưng dây 3 (C string, dày) có dao động MFCC khác dây 1 (A string, mỏng). Giúp phân biệt cùng nhạc cụ nhưng dây khác nhau. |
+
+**Tại sao chỉ C1-C4?**
+- **C0 Std** = Dao động năng lượng theo thời gian → trùng lặp với RMS Mean/Std.
+- **C5-C8 Std** = Chi tiết quá nhỏ, bị chi phối bởi ngẫu nhiên khi nhạc công rung tay, không đại diện cho đặc tính lâu dài.
+
+#### Trục 6: Khởi Phát — Attack Time (1 chiều)
+
+| Dim | Tên | Vai trò cụ thể |
+|:---:|:---|:---|
+| `[22]` | Attack Time | **Cách nhạc công bắt đầu nốt.** Contrabass (dây dày) mất nhiều thời gian hơn Viola (dây mỏng) để đạt đỉnh biên độ. Tương tự, ff attack nhanh hơn pp attack. |
+
+### 3.3. Tổng Kết Vector Đề Xuất: 23 Chiều
+
+```
+[0-9]   MFCC Mean C1-C10     (10 dim) → Nhạc cụ
+[10-12] F0 MIDI ×3           ( 3 dim) → Cao độ (trọng số tăng cường)
+[13]    RMS Mean             ( 1 dim) → Cường độ
+[14-17] Spectral Contrast    ( 4 dim) → Sắc thái hài
+[18-21] MFCC Std C1-C4       ( 4 dim) → Kết cấu
+[22]    Attack Time          ( 1 dim) → Khởi phát
+─────────────────────────────────────
+TỔNG: 23 chiều
+```
+
+**Phân bổ trọng số hiệu dụng (sau Z-Score + L2):**
+
+| Trục nhận thức | Số chiều | Tỷ lệ | Ghi chú |
+|:---|:---:|:---:|:---|
+| Nhạc cụ (MFCC Mean) | 10 | 43.5% | Xương sống phân biệt instrument |
+| Cao độ (F0 MIDI ×3) | 3 | 13.0% | Đủ mạnh để ưu tiên nốt gần |
+| Cường độ (RMS) | 1 | 4.3% | Phân biệt pp/mf/ff |
+| Sắc thái (Contrast) | 4 | 17.4% | Đục vs trong |
+| Kết cấu (MFCC Std) | 4 | 17.4% | Ổn định vs biến thiên |
+| Onset (Attack) | 1 | 4.3% | Nhanh vs chậm |
+
+---
+
+## 4. Các Thuộc Tính BỊ LOẠI BỎ Và Lý Do
+
+| Thuộc tính | Bài giảng có đề cập? | Lý do loại bỏ cho TinySOL |
+|:---|:---:|:---|
+| **ZCR** (Tốc độ đổi dấu) | ✅ Có | Dataset 100% ordinario → ZCR gần như đồng nhất giữa mọi file. Phương sai ≈ 0 → không phân biệt được gì. |
+| **Silence Ratio** (Phần trăm lặng) | ✅ Có | Mỗi file là 1 nốt duy nhất, kéo liên tục. Tỷ lệ lặng ≈ 0 cho tất cả → vô nghĩa. |
+| **Spectral Centroid** (Trọng tâm phổ) | ✅ Có | Tương quan tuyến tính rất cao (>0.85) với tổ hợp MFCC C1-C3 + F0. Giữ lại = thêm 1 "phiếu bầu" cho thông tin đã có. |
+| **Bandwidth** (Băng thông) | ✅ Có | Tương quan cao với Spectral Centroid và MFCC C1-C2. Là thống kê tóm tắt bậc 2 của phổ mà MFCC đã mô tả đầy đủ. |
+| **Spectral Rolloff** | Không | Điểm tần số mà 85% năng lượng nằm dưới. Tương quan với Centroid + Bandwidth → dư thừa. |
+| **Spectral Flatness** | Không | Đo "nhiễu trắng vs tín hiệu hài". TinySOL = tín hiệu hài thuần → flatness ≈ 0 cho tất cả. |
+| **MFCC C0** | ✅ (Năng lượng) | = log(energy). Trùng lặp trực tiếp với RMS Mean. Giữ cả hai = cho Dynamics bỏ phiếu 2 lần. |
+| **MFCC C11-C12** (Mean + Std) | Không | Hệ số DCT bậc cao, phản ánh vi cấu trúc phổ = nhiễu micro + nhựa thông. Giá trị ≈ 0. |
+| **Contrast B5-B7** | Không | Dải siêu cao (>4kHz), nhạc cụ bộ dây không phát tín hiệu ý nghĩa ở đây. |
+| **Peak Normalize** | Không | Xóa biên độ gốc → mất thông tin dynamics (pp/mf/ff). |
+| **Harmonicity** (Độ điều hòa) | ✅ Có | Spectral Contrast B1-B4 đã đo tương tự (peaks vs valleys = harmonic vs noise). Giữ cả 2 → dư thừa. |
+
+---
+
+## 5. So Sánh Với Bài Giảng
+
+| Thuộc tính bài giảng | Có trong hệ thống? | Ghi chú |
+|:---|:---:|:---|
+| Năng lượng trung bình | ✅ `RMS Mean` | Đo trực tiếp loudness |
+| Tốc độ đổi dấu (ZCR) | ❌ Bỏ | Dataset 100% ordinario → phương sai ≈ 0 |
+| Phần trăm lặng | ❌ Bỏ | Mỗi file = 1 nốt liên tục → silence ≈ 0 |
+| Phổ âm thanh | ✅ `MFCC Mean + Std` | MFCC = biểu diễn nén của phổ |
+| Băng thông | ❌ Bỏ | Dư thừa với MFCC C1-C2 |
+| Trọng tâm phổ (Centroid) | ❌ Bỏ | Dư thừa với MFCC + F0 |
+| Độ điều hòa âm | ✅ `Spectral Contrast` | Contrast = phiên bản chi tiết hơn (theo dải tần) |
+| Độ cao (Pitch) | ✅ `F0 Median (MIDI)` | Trích xuất bằng pyin, chuyển sang thang MIDI |
+
+> [!IMPORTANT]
+> Bài giảng liệt kê đầy đủ các thuộc tính **tổng quát** cho mọi loại âm thanh (tiếng nói, nhạc, tiếng ồn...). Hệ thống của chúng ta **chuyên biệt** cho TinySOL (nhạc cụ cổ điển, nốt đơn, thu phòng thu chuẩn), nên nhiều thuộc tính tổng quát trở nên vô nghĩa hoặc dư thừa khi áp dụng vào dataset cụ thể này.
