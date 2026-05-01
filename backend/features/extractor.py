@@ -34,19 +34,17 @@ def extract_feature_vector(file_path: str, version: int = 1) -> tuple[np.ndarray
     f0_hz = compute_f0_median(y, sr)
     rms_mean = compute_rms_mean(y)
     contrast_mean = compute_spectral_contrast_mean(y, sr)
-    attack_time = compute_attack_time(y, sr)
 
-    # Chuyển F0 Hz → MIDI (thang logarithmic đều đặn). Nếu unvoiced (f0=0) → MIDI=0
+    # Chuyển F0 Hz -> MIDI (thang logarithmic đều đặn). Nếu unvoiced (f0=0) -> MIDI=0
     f0_midi = float(librosa.hz_to_midi(f0_hz)) if f0_hz > 0 else 0.0
 
-    # --------- Bước 3: Ghép Vector 23 chiều ---------
-    vector_23d = np.concatenate([
+    # --------- Bước 3: Ghép Vector 22 chiều ---------
+    vector_22d = np.concatenate([
         mfcc_mean[1:11],        # 10 chiều: MFCC Mean C1-C10 (bỏ C0=log energy)
-        [f0_midi, f0_midi, f0_midi],  # 3 chiều: F0 MIDI ×3 (tăng trọng số pitch)
+        [f0_midi, f0_midi, f0_midi],  # 3 chiều: F0 MIDI x3 (tăng trọng số pitch)
         [rms_mean],             # 1 chiều: RMS Mean (loudness)
         contrast_mean[0:4],     # 4 chiều: Spectral Contrast B1-B4
         mfcc_std[1:5],          # 4 chiều: MFCC Std C1-C4 (kết cấu timbral)
-        [attack_time],          # 1 chiều: Attack Time
     ])
 
-    return vector_23d, float(actual_extract_sec)
+    return vector_22d, float(actual_extract_sec)

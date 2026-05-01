@@ -40,15 +40,14 @@ EXTRACT_SECONDS = 3.0
 # ============================================================
 # Feature Vector (Lý tưởng hóa cho TinySOL)
 # ============================================================
-VECTOR_DIM_V1 = 23       # Đã tinh gọn (Loại bỏ các chiều nhiễu/dư thừa)
+VECTOR_DIM_V1 = 22       # Đã tinh gọn (Loại bỏ Attack Time không ổn định)
 
 FEATURE_NAMES_V1 = [
     *[f"mfcc_mean_{i}" for i in range(1, 11)],  # [0-9]   MFCC Mean C1-C10
-    "f0_midi", "f0_midi", "f0_midi",             # [10-12] F0 MIDI ×3
+    "f0_midi", "f0_midi", "f0_midi",             # [10-12] F0 MIDI x3
     "rms_mean",                                  # [13]    RMS Mean
     *[f"contrast_{i}" for i in range(1, 5)],     # [14-17] Spectral Contrast B1-B4
     *[f"mfcc_std_{i}" for i in range(1, 5)],     # [18-21] MFCC Std C1-C4
-    "attack_time",                               # [22]    Attack Time
 ]
 
 # ============================================================

@@ -38,7 +38,7 @@ def parse_filename_metadata(filename: str):
 
 @app.post("/api/search")
 async def search_audio(file: UploadFile = File(...)):
-    """API Nhận file âm thanh, trả về top kết quả (Hệ thống 23D tinh khiết)."""
+    """API Nhận file âm thanh, trả về top kết quả (Hệ thống 22D tinh khiết)."""
     start_api = time.perf_counter()
     
     # 1. Lưu file tạm
@@ -49,13 +49,13 @@ async def search_audio(file: UploadFile = File(...)):
     # Phân tích metadata từ tên file để hiển thị cho người dùng
     input_meta = parse_filename_metadata(file.filename)
         
-    # 2. Extract Vector thô (23D)
+    # 2. Extract Vector thô (22D)
     try:
         raw_vec, actual_sec = extract_feature_vector(file_path)
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": f"Lỗi trích xuất âm thanh: {str(e)}"})
         
-    # 3. Chuẩn hóa Z-Score + L2 (Version 1 = 23D)
+    # 3. Chuẩn hóa Z-Score + L2 (Version 1 = 22D)
     clean_vec = normalize_vector(raw_vec, version=1)
     
     # 4. Tìm kiếm trong Database
@@ -78,7 +78,7 @@ async def search_audio(file: UploadFile = File(...)):
             "feature_vector": clean_vec.tolist(),
             "raw_vector": raw_vec.tolist(),
             "extract_sec": round(actual_sec, 2),
-            "dimensions": 23,
+            "dimensions": 22,
             "metadata": input_meta
         },
         "search_results": results["results"],

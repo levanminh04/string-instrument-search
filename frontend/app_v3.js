@@ -19,14 +19,6 @@ let currentResults = [];
 let currentQueryVector = null;
 let currentAudio = null;
 let currentPlayingBtn = null;
-let currentRawVector = null;
-
-// New UI Elements for Raw Inspector
-const btnRawInspector = document.getElementById('btn-raw-inspector');
-const inputCardActions = document.getElementById('input-card-actions');
-const rawInspectorCard = document.getElementById('raw-inspector-card');
-const rawDataList = document.getElementById('raw-data-list');
-const btnCloseRaw = document.getElementById('btn-close-raw');
 
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -50,16 +42,6 @@ fileInput.addEventListener('change', (e) => {
 async function handleFile(file) {
     if (!file.type.startsWith('audio/')) return alert('Please upload an audio file.');
 
-    // Stop existing audio
-    if (currentAudio) {
-        currentAudio.pause();
-        currentAudio = null;
-        if (currentPlayingBtn) {
-            currentPlayingBtn.querySelector('i').className = 'fa-solid fa-play';
-            currentPlayingBtn = null;
-        }
-    }
-
     // Clear UI
     resultsList.innerHTML = '<div class="searching-spinner"><i class="fa-solid fa-compact-disc fa-spin fa-3x"></i><p>Extracting 23D Features...</p></div>';
 
@@ -79,13 +61,8 @@ async function handleFile(file) {
 
         if (data.error) throw new Error(data.error);
 
-        // UI toggles
-        document.getElementById('input-player-card').classList.remove('hidden');
-        rawInspectorCard.classList.add('hidden'); // Reset inspector
-
         currentResults = data.search_results;
         currentQueryVector = data.query.feature_vector;
-        currentRawVector = data.query.raw_vector;
 
         await logToTerminal(`[DSP] Extracted 23D Vector (Optimized).`, 200);
         await logToTerminal(`[DB] Executing pgvector Exact Cosine Match...`, 300);
@@ -93,7 +70,6 @@ async function handleFile(file) {
 
         searchTimeBadge.innerText = `${data.timing.total_api_ms}ms`;
         searchTimeBadge.classList.remove('hidden');
-        inputCardActions.classList.remove('hidden'); // Show inspector button
 
         renderInputInfo(data.query);
         renderResults();
@@ -106,7 +82,6 @@ async function handleFile(file) {
 
 function renderInputInfo(queryData) {
     inputFilename.innerText = queryData.file_name;
-    document.getElementById('input-duration').innerText = queryData.extract_sec || "...";
     const m = queryData.metadata;
     if (m) {
         inputMetadata.innerText = `${m.instrument} / ${m.pitch} / ${m.dynamics} / ${m.technique}`;
@@ -266,55 +241,4 @@ function playAudio(url, btn) {
         alert("Lỗi khi phát âm thanh.");
         icon.className = 'fa-solid fa-circle-exclamation';
     };
-}
-
-// --- Raw Inspector Handlers ---
-btnRawInspector.addEventListener('click', () => {
-    rawInspectorCard.classList.remove('hidden');
-    renderRawTable();
-});
-
-btnCloseRaw.addEventListener('click', () => {
-    rawInspectorCard.classList.add('hidden');
-});
-
-function renderRawTable() {
-    if (!currentRawVector) return;
-
-    // Feature names (aligned with config.py)
-    const names = [
-        "MFCC 1", "MFCC 2", "MFCC 3", "MFCC 4", "MFCC 5", "MFCC 6", "MFCC 7", "MFCC 8", "MFCC 9", "MFCC 10",
-        "Pitch (MIDI) 1", "Pitch (MIDI) 2", "Pitch (MIDI) 3",
-        "Loudness (RMS)",
-        "Contr B1", "Contr B2", "Contr B3", "Contr B4",
-        "MFCC Std 1", "MFCC Std 2", "MFCC Std 3", "MFCC Std 4",
-        "Attack Time (s)"
-    ];
-
-    let html = '<table style="width:100%; border-collapse: collapse;">';
-    html += '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1); color: #ffc107; text-align: left;"><th>Feature</th><th>Raw Value</th></tr>';
-
-    currentRawVector.forEach((val, i) => {
-        let displayVal = val.toFixed(4);
-        if (i >= 10 && i <= 12) { // Pitch MIDI
-            const note = val > 0 ? `(${midiToNote(val)})` : "";
-            displayVal = `${val.toFixed(2)} ${note}`;
-        }
-        if (i === 22) displayVal = `${val.toFixed(3)}s`; // Attack
-
-        html += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-            <td style="padding: 4px 0; opacity: 0.8;">${names[i]}</td>
-            <td style="padding: 4px 0; color: #fff;">${displayVal}</td>
-        </tr>`;
-    });
-    html += '</table>';
-    rawDataList.innerHTML = html;
-}
-
-function midiToNote(midi) {
-    const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    const octave = Math.floor(midi / 12) - 1;
-    const notePos = Math.round(midi) % 12;
-    const note = notes[notePos < 0 ? notePos + 12 : notePos];
-    return note + octave;
 }
