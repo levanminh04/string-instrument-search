@@ -1,5 +1,5 @@
 /**
- * AUDIO SEARCH ENGINE - CORE LOGIC (v23D Optimized)
+ * AUDIO SEARCH ENGINE - CORE LOGIC (Multi-Vector Optimized)
  */
 
 // UI Elements
@@ -10,19 +10,28 @@ const terminalLogs = document.getElementById('terminal-body');
 const searchTimeBadge = document.getElementById('search-time');
 const eqBoard = document.getElementById('eq-board');
 
-// Metadata Elements
+// Metadata & Inspector Elements
 const inputFilename = document.getElementById('input-filename');
 const inputMetadata = document.getElementById('input-metadata');
+const inputDuration = document.getElementById('input-duration');
+const inputPlayerCard = document.getElementById('input-player-card');
+const inputCardActions = document.getElementById('input-card-actions');
+const btnRawInspector = document.getElementById('btn-raw-inspector');
+const rawInspectorCard = document.getElementById('raw-inspector-card');
+const btnCloseRaw = document.getElementById('btn-close-raw');
+const rawDataList = document.getElementById('raw-data-list');
+const playInputBtn = document.getElementById('play-input-btn');
 
 // State
 let currentResults = [];
-let currentQueryVector = null;
+let currentQueryData = null;
 let currentAudio = null;
 let currentPlayingBtn = null;
+let inputAudioObjectUrl = null;
 
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
-    logToTerminal("System initialized. Awaiting 23D acoustic input...", 500);
+    logToTerminal("System initialized. Multi-Vector Engine Ready.", 500);
 });
 
 // --- Upload Logic ---
@@ -43,11 +52,18 @@ async function handleFile(file) {
     if (!file.type.startsWith('audio/')) return alert('Please upload an audio file.');
 
     // Clear UI
-    resultsList.innerHTML = '<div class="searching-spinner"><i class="fa-solid fa-compact-disc fa-spin fa-3x"></i><p>Extracting 23D Features...</p></div>';
+    resultsList.innerHTML = '<div class="searching-spinner"><i class="fa-solid fa-compact-disc fa-spin fa-3x"></i><p>Extracting Multi-Vector Features...</p></div>';
+    rawInspectorCard.classList.add('hidden');
+
+    // Setup input player
+    if (inputAudioObjectUrl) URL.revokeObjectURL(inputAudioObjectUrl);
+    inputAudioObjectUrl = URL.createObjectURL(file);
+    inputPlayerCard.classList.remove('hidden');
+    inputCardActions.classList.remove('hidden');
 
     // Log
     await logToTerminal(`[Sys] Analyzing: ${file.name}`, 100);
-    await logToTerminal(`[DSP] Initializing librosa.pyin for F0 estimation...`, 200);
+    await logToTerminal(`[DSP] Separation: Pitch (3D) & Timbre (18D)...`, 200);
 
     const formData = new FormData();
     formData.append('file', file);
@@ -62,10 +78,10 @@ async function handleFile(file) {
         if (data.error) throw new Error(data.error);
 
         currentResults = data.search_results;
-        currentQueryVector = data.query.feature_vector;
+        currentQueryData = data.query;
 
-        await logToTerminal(`[DSP] Extracted 23D Vector (Optimized).`, 200);
-        await logToTerminal(`[DB] Executing pgvector Exact Cosine Match...`, 300);
+        await logToTerminal(`[DSP] Feature extraction complete. RMS: ${data.query.rms_mean.toFixed(4)}`, 200);
+        await logToTerminal(`[DB] Filter-and-Rank Search executed.`, 300);
         await logToTerminal(`[Sys] Located ${currentResults.length} matches in ${data.timing.total_api_ms}ms!`, 100);
 
         searchTimeBadge.innerText = `${data.timing.total_api_ms}ms`;
@@ -82,9 +98,10 @@ async function handleFile(file) {
 
 function renderInputInfo(queryData) {
     inputFilename.innerText = queryData.file_name;
+    inputDuration.innerText = queryData.extract_sec;
     const m = queryData.metadata;
     if (m) {
-        inputMetadata.innerText = `${m.instrument} / ${m.pitch} / ${m.dynamics} / ${m.technique}`;
+        inputMetadata.innerText = `${m.instrument} / ${m.pitch} / ${m.dynamics} / ${m.technique}${m.string_id && m.string_id !== 'Unknown' ? ' / String ' + m.string_id : ''}`;
     } else {
         inputMetadata.innerText = "";
     }
@@ -103,7 +120,7 @@ function renderResults() {
                     <button class="btn-play" onclick="playAudio('${res.audio_url}', this); event.stopPropagation();"><i class="fa-solid fa-play"></i></button>
                     <div class="match-info">
                         <h4>${crown} ${res.file_name}</h4>
-                        <div class="inst-text">${res.instrument} / ${res.pitch || '?'} / ${res.dynamics || '?'} / ${res.technique || '?'} / String: ${res.string_id || '?'}</div>
+                        <div class="inst-text">${res.instrument} / ${res.pitch || '?'} / ${res.dynamics || '?'} / ${res.technique || '?'}${res.string_id ? ' / String ' + res.string_id : ''}</div>
                     </div>
                     <div class="match-score ${rankClass}">${simPercent}%</div>
                 </div>
@@ -114,49 +131,41 @@ function renderResults() {
     resultsList.innerHTML = html;
 
     if (currentResults.length > 0) {
-        renderFullEQBoard(currentQueryVector, currentResults[0].feature_vector);
+        const inVec = [...currentQueryData.pitch_vector, ...currentQueryData.timbre_vector];
+        const outVec = [...currentResults[0].pitch_vector, ...currentResults[0].timbre_vector];
+        renderFullEQBoard(inVec, outVec);
     }
 }
 
 function renderFullEQBoard(inVec, outVec) {
-    if (!inVec || inVec.length < 23) return;
+    if (!inVec || inVec.length < 21) return;
 
     let html = `
         <div class="text-muted text-sm mb-3">
-            <i class="fa-solid fa-circle-info"></i> Hiển thị giá trị chuẩn hóa <b>Z-Score</b>. 
-            Hệ thống 23D tối ưu hóa cho nhạc cụ dây (TinySOL).
+            <i class="fa-solid fa-circle-info"></i> Hiển thị <b>Z-Score</b>. 
+            Mô hình Multi-Vector: Pitch (Euclidean) + Timbre (Cosine).
         </div>
     `;
 
-    // Mapping dựa trên backend/features/extractor.py:
-    // [0-9]:   MFCC Mean C1-C10
-    // [10-12]: F0 MIDI x3
-    // [13]:    RMS Mean
-    // [14-17]: Spectral Contrast B1-B4
-    // [18-21]: MFCC Std C1-C4
-    // [22]:    Attack Time
-
-    // 1. TEMPORAL & ENERGY
-    html += `<div class="eq-category"><div class="category-title"><i class="fa-solid fa-clock"></i> Temporal & Energy</div>`;
-    html += genRow('Attack Time', inVec[22], outVec[22]);
-    html += genRow('RMS Mean (Energy)', inVec[13], outVec[13]);
-    html += genRow('Fundamental Pitch (F0)', inVec[10], outVec[10]);
+    // 1. PITCH PILLAR (3D)
+    html += `<div class="eq-category"><div class="category-title"><i class="fa-solid fa-music"></i> Pitch Pillar (Exact Match)</div>`;
+    html += genRow('Fundamental Pitch (F0)', inVec[0], outVec[0]);
     html += `</div>`;
 
-    // 2. MFCC MEAN (Timbre)
-    html += `<div class="eq-category"><div class="category-title"><i class="fa-solid fa-chart-bar"></i> MFCC Mean (C1 - C10)</div>`;
+    // 2. TIMBRE PILLAR - MFCC MEAN (10D)
+    html += `<div class="eq-category"><div class="category-title"><i class="fa-solid fa-fingerprint"></i> Timbre: Spectral Envelope (MFCC)</div>`;
     for (let i = 0; i < 10; i++) {
-        html += genRow(`MFCC Mean ${i + 1}`, inVec[i], outVec[i]);
+        html += genRow(`MFCC Mean ${i + 1}`, inVec[3 + i], outVec[3 + i]);
     }
     html += `</div>`;
 
-    // 3. TEXTURE & HARMONY
-    html += `<div class="eq-category"><div class="category-title"><i class="fa-solid fa-wave-square"></i> Texture & Harmony</div>`;
+    // 3. TIMBRE PILLAR - TEXTURE (8D)
+    html += `<div class="eq-category"><div class="category-title"><i class="fa-solid fa-braille"></i> Timbre: Texture & contrast</div>`;
     for (let i = 0; i < 4; i++) {
-        html += genRow(`MFCC Std ${i + 1}`, inVec[18 + i], outVec[18 + i]);
+        html += genRow(`Spectral Contrast B${i + 1}`, inVec[13 + i], outVec[13 + i]);
     }
     for (let i = 0; i < 4; i++) {
-        html += genRow(`Spectral Contrast B${i + 1}`, inVec[14 + i], outVec[14 + i]);
+        html += genRow(`MFCC Std ${i + 1}`, inVec[17 + i], outVec[17 + i]);
     }
     html += `</div>`;
 
@@ -186,25 +195,57 @@ function genRow(label, inVal, outVal) {
     `;
 }
 
-// Helper Utilities
-async function logToTerminal(msg, delay = 0) {
-    const line = document.createElement('div');
-    line.innerHTML = `> ${msg}`;
-    terminalLogs.appendChild(line);
-    terminalLogs.scrollTop = terminalLogs.scrollHeight;
-    if (delay > 0) await new Promise(r => setTimeout(r, delay));
+// --- Raw Inspector Logic ---
+btnRawInspector.addEventListener('click', () => {
+    if (!currentQueryData) return;
+    rawInspectorCard.classList.remove('hidden');
+    renderRawInspector();
+});
+
+btnCloseRaw.addEventListener('click', () => rawInspectorCard.classList.add('hidden'));
+
+function renderRawInspector() {
+    const q = currentQueryData;
+    let html = `
+        <table style="width: 100%; border-collapse: collapse; color: #ffc107;">
+            <tr style="border-bottom: 1px solid rgba(255, 193, 7, 0.2);">
+                <th style="text-align: left; padding: 4px;">Feature</th>
+                <th style="text-align: right; padding: 4px;">Raw Value</th>
+            </tr>
+            <tr><td style="padding: 4px;">RMS Mean (Energy)</td><td style="text-align: right; color: #fff;">${q.rms_mean.toFixed(6)}</td></tr>
+            <tr><td style="padding: 4px;">F0 MIDI (Pitch)</td><td style="text-align: right; color: #fff;">${q.raw_pitch[0].toFixed(2)}</td></tr>
+            <tr style="background: rgba(255, 255, 255, 0.05);"><td colspan="2" style="padding: 4px; font-weight: bold;">MFCC Mean (C1-C10)</td></tr>
+    `;
+    
+    q.raw_timbre.slice(0, 10).forEach((val, i) => {
+        html += `<tr><td style="padding: 4px; padding-left: 15px;">MFCC C${i+1}</td><td style="text-align: right; color: #fff;">${val.toFixed(4)}</td></tr>`;
+    });
+
+    html += `<tr style="background: rgba(255, 255, 255, 0.05);"><td colspan="2" style="padding: 4px; font-weight: bold;">Spectral Contrast (B1-B4)</td></tr>`;
+    q.raw_timbre.slice(10, 14).forEach((val, i) => {
+        html += `<tr><td style="padding: 4px; padding-left: 15px;">Contrast B${i+1}</td><td style="text-align: right; color: #fff;">${val.toFixed(4)}</td></tr>`;
+    });
+
+    html += `</table>`;
+    rawDataList.innerHTML = html;
 }
+
+// --- Playback Logic ---
+playInputBtn.addEventListener('click', () => {
+    if (inputAudioObjectUrl) playAudio(inputAudioObjectUrl, playInputBtn);
+});
 
 function selectResult(index) {
     document.querySelectorAll('.match-card').forEach(c => c.classList.remove('active'));
     document.getElementById(`result-card-${index}`).classList.add('active');
-    renderFullEQBoard(currentQueryVector, currentResults[index].feature_vector);
+    const inVec = [...currentQueryData.pitch_vector, ...currentQueryData.timbre_vector];
+    const outVec = [...currentResults[index].pitch_vector, ...currentResults[index].timbre_vector];
+    renderFullEQBoard(inVec, outVec);
 }
 
 function playAudio(url, btn) {
     const icon = btn.querySelector('i');
 
-    // Nếu đang phát chính bài này -> Tạm dừng
     if (currentAudio && currentPlayingBtn === btn) {
         if (!currentAudio.paused) {
             currentAudio.pause();
@@ -216,7 +257,6 @@ function playAudio(url, btn) {
         return;
     }
 
-    // Nếu đang phát bài khác -> Dừng bài đó, reset icon
     if (currentAudio) {
         currentAudio.pause();
         currentAudio.currentTime = 0;
@@ -225,7 +265,6 @@ function playAudio(url, btn) {
         }
     }
 
-    // Phát bài mới
     icon.className = 'fa-solid fa-spinner fa-spin';
     currentAudio = new Audio(url);
     currentPlayingBtn = btn;
@@ -241,4 +280,12 @@ function playAudio(url, btn) {
         alert("Lỗi khi phát âm thanh.");
         icon.className = 'fa-solid fa-circle-exclamation';
     };
+}
+
+async function logToTerminal(msg, delay = 0) {
+    const line = document.createElement('div');
+    line.innerHTML = `> ${msg}`;
+    terminalLogs.appendChild(line);
+    terminalLogs.scrollTop = terminalLogs.scrollHeight;
+    if (delay > 0) await new Promise(r => setTimeout(r, delay));
 }

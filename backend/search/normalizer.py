@@ -32,8 +32,14 @@ def l2_normalize(vector: np.ndarray) -> np.ndarray:
     return vector / norm
 
 
-def normalize_vector(raw_vector: np.ndarray, version: int = 1) -> np.ndarray:
-    """Pipeline chuẩn hóa hoàn chỉnh: Z-Score → L2."""
+def normalize_pitch(raw_pitch: np.ndarray, version: int = 10) -> np.ndarray:
+    """Chuẩn hóa Pitch: CHỈ DÙNG Z-Score (Không dùng L2)."""
     mean_vec, std_vec = load_scaler(version)
-    z_scored = z_score_normalize(raw_vector, mean_vec, std_vec)
+    return z_score_normalize(raw_pitch, mean_vec, std_vec)
+
+
+def normalize_timbre(raw_timbre: np.ndarray, version: int = 11) -> np.ndarray:
+    """Chuẩn hóa Timbre: Z-Score → L2."""
+    mean_vec, std_vec = load_scaler(version)
+    z_scored = z_score_normalize(raw_timbre, mean_vec, std_vec)
     return l2_normalize(z_scored)

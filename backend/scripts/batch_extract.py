@@ -10,7 +10,7 @@ import numpy as np
 # Thêm thư mục gốc vào path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from backend.config import DATASET_DIR, METADATA_CSV, VECTOR_DIM_V1
+from backend.config import DATASET_DIR, METADATA_CSV, PITCH_DIM, TIMBRE_DIM
 from backend.features.extractor import extract_feature_vector
 from backend.database import get_connection
 
@@ -25,13 +25,10 @@ def load_metadata(csv_path: str) -> dict:
     return metadata
 
 
-def batch_extract(version: int = 1):
+def batch_extract():
     """Quét toàn bộ dataset, extract feature, INSERT vào audio_files."""
-    col = "feature_vector"
-    dim = VECTOR_DIM_V1
-
     print("=" * 60)
-    print(f"  BATCH EXTRACT — Giai đoạn {version} ({dim} chiều)")
+    print(f"  BATCH EXTRACT — Multi-Vector Architecture (Pitch {PITCH_DIM}D + Timbre {TIMBRE_DIM}D)")
     print("=" * 60)
 
     # Load metadata
@@ -42,12 +39,9 @@ def batch_extract(version: int = 1):
     conn = get_connection()
     cur = conn.cursor()
 
-    if version == 1:
-        print("  🧹 Đang dọn dẹp Database cũ (TRUNCATE) để nạp mới hoàn toàn...")
-        cur.execute("TRUNCATE TABLE audio_files, scaler_params, search_logs RESTART IDENTITY CASCADE;")
-        conn.commit()
-    else:
-        print(f"  ⚡ Đang nạp bổ sung {col} vào Database có sẵn...")
+    print("  🧹 Đang dọn dẹp Database cũ (TRUNCATE) để nạp mới hoàn toàn...")
+    cur.execute("TRUNCATE TABLE audio_files, scaler_params, search_logs RESTART IDENTITY CASCADE;")
+    conn.commit()
 
     count = 0
     errors = []
@@ -69,7 +63,7 @@ def batch_extract(version: int = 1):
 
             try:
                 # Extract vector và thời gian thực tế đã quét
-                raw_vector, extract_duration_sec = extract_feature_vector(file_path, version=version)
+                raw_pitch, raw_timbre, rms_mean, extract_duration_sec = extract_feature_vector(file_path)
 
                 # INSERT / UPDATE
                 cur.execute(
@@ -77,12 +71,12 @@ def batch_extract(version: int = 1):
                     INSERT INTO audio_files
                         (file_name, file_path, duration_sec, extract_duration_sec, instrument, technique,
                          pitch, pitch_id, dynamics, dynamics_id, string_id, instance_id,
-                         {col}, vector_version)
+                         pitch_vector, timbre_vector)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (file_path) DO UPDATE SET
                         extract_duration_sec = EXCLUDED.extract_duration_sec,
-                        {col} = EXCLUDED.{col},
-                        vector_version = EXCLUDED.vector_version
+                        pitch_vector = EXCLUDED.pitch_vector,
+                        timbre_vector = EXCLUDED.timbre_vector
                     """,
                     (
                         file_name,
@@ -97,8 +91,8 @@ def batch_extract(version: int = 1):
                         int(meta["dynamics_id"]) if meta.get("dynamics_id") else None,
                         float(meta["string_id"]) if meta.get("string_id") else None,
                         int(meta["instance_id"]) if meta.get("instance_id") else None,
-                        raw_vector.tolist(),
-                        version,
+                        raw_pitch.tolist(),
+                        raw_timbre.tolist(),
                     ),
                 )
 
@@ -123,7 +117,4 @@ def batch_extract(version: int = 1):
 
 
 if __name__ == "__main__":
-    v = 1
-    if len(sys.argv) > 1:
-        v = int(sys.argv[1])
-    batch_extract(version=v)
+    batch_extract()

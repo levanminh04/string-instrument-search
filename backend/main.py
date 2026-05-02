@@ -10,9 +10,9 @@ from fastapi.responses import JSONResponse
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.config import UPLOAD_DIR, BASE_DIR, VECTOR_DIM_V1
+from backend.config import UPLOAD_DIR, BASE_DIR, PITCH_DIM, TIMBRE_DIM
 from backend.features.extractor import extract_feature_vector
-from backend.search.normalizer import normalize_vector
+from backend.search.normalizer import normalize_pitch, normalize_timbre
 from backend.search.similarity import search_similar
 
 app = FastAPI(title="Violin & String Instrument Finder")
@@ -34,11 +34,30 @@ def parse_filename_metadata(filename: str):
         meta["technique"] = "ordinario" if parts[1] == "ord" else parts[1]
         meta["pitch"] = parts[2]
         meta["dynamics"] = parts[3]
+        
+    # Attempt to fetch exact metadata from DB if it exists
+    try:
+        from backend.database import get_connection
+        conn = get_connection()
+        with conn.cursor() as cur:
+            cur.execute("SELECT instrument, technique, pitch, dynamics, string_id FROM audio_files WHERE file_name = %s LIMIT 1", (filename,))
+            row = cur.fetchone()
+            if row:
+                meta["instrument"] = row[0] if row[0] else meta["instrument"]
+                meta["technique"] = row[1] if row[1] else meta["technique"]
+                meta["pitch"] = row[2] if row[2] else meta["pitch"]
+                meta["dynamics"] = row[3] if row[3] else meta["dynamics"]
+                if row[4] is not None:
+                    meta["string_id"] = int(row[4])
+        conn.close()
+    except Exception as e:
+        pass
+        
     return meta
 
 @app.post("/api/search")
 async def search_audio(file: UploadFile = File(...)):
-    """API Nhận file âm thanh, trả về top kết quả (Hệ thống 22D tinh khiết)."""
+    """API Nhận file âm thanh, trả về top kết quả (Multi-Vector 3D+18D)."""
     start_api = time.perf_counter()
     
     # 1. Lưu file tạm
@@ -49,17 +68,18 @@ async def search_audio(file: UploadFile = File(...)):
     # Phân tích metadata từ tên file để hiển thị cho người dùng
     input_meta = parse_filename_metadata(file.filename)
         
-    # 2. Extract Vector thô (22D)
+    # 2. Extract Vector thô
     try:
-        raw_vec, actual_sec = extract_feature_vector(file_path)
+        raw_pitch, raw_timbre, rms_mean, actual_sec = extract_feature_vector(file_path)
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": f"Lỗi trích xuất âm thanh: {str(e)}"})
         
-    # 3. Chuẩn hóa Z-Score + L2 (Version 1 = 22D)
-    clean_vec = normalize_vector(raw_vec, version=1)
+    # 3. Chuẩn hóa Pitch và Timbre riêng biệt
+    clean_pitch = normalize_pitch(raw_pitch, version=10)
+    clean_timbre = normalize_timbre(raw_timbre, version=11)
     
-    # 4. Tìm kiếm trong Database
-    results = search_similar(clean_vec, top_k=6)
+    # 4. Tìm kiếm trong Database bằng Filter-and-Rank
+    results = search_similar(clean_pitch, clean_timbre, top_k=6)
     
     # Thêm đường dẫn file cho kết quả
     for res in results["results"]:
@@ -75,10 +95,13 @@ async def search_audio(file: UploadFile = File(...)):
         "query": {
             "file_name": file.filename,
             "audio_url": f"/uploads/{encoded_upload}",
-            "feature_vector": clean_vec.tolist(),
-            "raw_vector": raw_vec.tolist(),
+            "pitch_vector": clean_pitch.tolist(),
+            "timbre_vector": clean_timbre.tolist(),
+            "raw_pitch": raw_pitch.tolist(),
+            "raw_timbre": raw_timbre.tolist(),
+            "rms_mean": rms_mean,
             "extract_sec": round(actual_sec, 2),
-            "dimensions": 22,
+            "dimensions": f"{PITCH_DIM}D + {TIMBRE_DIM}D",
             "metadata": input_meta
         },
         "search_results": results["results"],

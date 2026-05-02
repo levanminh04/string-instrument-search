@@ -13,17 +13,15 @@ from backend.features.spectral import compute_spectral_contrast_mean
 from backend.features.cepstral import compute_mfcc_mean_std
 
 
-def extract_feature_vector(file_path: str, version: int = 1) -> tuple[np.ndarray, float]:
+def extract_feature_vector(file_path: str, version: int = 2) -> tuple[np.ndarray, np.ndarray, float, float]:
     """
-    Trích xuất vector đặc trưng 23 chiều tối ưu cho TinySOL.
-
-    Cấu trúc 23 chiều:
-    - [0-9]:   MFCC Mean C1-C10  (10 dim) → Nhạc cụ (Timbre)
-    - [10-12]: F0 MIDI ×3        ( 3 dim) → Cao độ (feature repetition để tăng trọng số)
-    - [13]:    RMS Mean           ( 1 dim) → Cường độ (pp/mf/ff)
-    - [14-17]: Spectral Contrast B1-B4 ( 4 dim) → Sắc thái hài
-    - [18-21]: MFCC Std C1-C4    ( 4 dim) → Kết cấu timbral
-    - [22]:    Attack Time        ( 1 dim) → Khởi phát
+    Trích xuất vector đặc trưng kiến trúc Multi-Vector (Pitch 3D + Timbre 18D).
+    
+    Trả về:
+    - pitch_vector (3D): F0 MIDI x3
+    - timbre_vector (18D): MFCC Mean (10), Contrast (4), MFCC Std (4)
+    - rms_mean (1D): Cường độ âm thanh (để hiển thị UI, không đưa vào vector search)
+    - actual_extract_sec (float): Thời gian trích xuất thực tế
     """
     # --------- Bước 1: Tiền xử lý ---------
     y, sr = load_and_preprocess(file_path)
@@ -38,13 +36,13 @@ def extract_feature_vector(file_path: str, version: int = 1) -> tuple[np.ndarray
     # Chuyển F0 Hz -> MIDI (thang logarithmic đều đặn). Nếu unvoiced (f0=0) -> MIDI=0
     f0_midi = float(librosa.hz_to_midi(f0_hz)) if f0_hz > 0 else 0.0
 
-    # --------- Bước 3: Ghép Vector 22 chiều ---------
-    vector_22d = np.concatenate([
+    # --------- Bước 3: Ghép Vector ---------
+    pitch_vector = np.array([f0_midi, f0_midi, f0_midi], dtype=np.float32)
+    
+    timbre_vector = np.concatenate([
         mfcc_mean[1:11],        # 10 chiều: MFCC Mean C1-C10 (bỏ C0=log energy)
-        [f0_midi, f0_midi, f0_midi],  # 3 chiều: F0 MIDI x3 (tăng trọng số pitch)
-        [rms_mean],             # 1 chiều: RMS Mean (loudness)
         contrast_mean[0:4],     # 4 chiều: Spectral Contrast B1-B4
         mfcc_std[1:5],          # 4 chiều: MFCC Std C1-C4 (kết cấu timbral)
-    ])
+    ]).astype(np.float32)
 
-    return vector_22d, float(actual_extract_sec)
+    return pitch_vector, timbre_vector, float(rms_mean), float(actual_extract_sec)

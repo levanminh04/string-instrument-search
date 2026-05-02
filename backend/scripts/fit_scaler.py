@@ -11,19 +11,19 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from backend.database import get_connection
 
 
-def fit_scaler(version: int = 1):
+def fit_scaler():
     """
-    Đọc tất cả raw feature_vector từ DB (23 chiều),
-    tính mean/std, lưu vào scaler_params,
-    rồi cập nhật lại tất cả vector = Z-Score + L2.
+    Đọc tất cả raw pitch_vector và timbre_vector từ DB,
+    tính mean/std, lưu vào scaler_params.
+    Cập nhật lại DB:
+    - pitch_vector = Z-Score
+    - timbre_vector = Z-Score + L2
     """
-    col = "feature_vector"
-
     conn = get_connection()
     cur = conn.cursor()
 
-    # 1. Lấy tất cả raw vectors
-    cur.execute(f"SELECT id, {col}::text FROM audio_files WHERE {col} IS NOT NULL")
+    # 1. Lấy tất cả vectors
+    cur.execute("SELECT id, pitch_vector::text, timbre_vector::text FROM audio_files WHERE pitch_vector IS NOT NULL AND timbre_vector IS NOT NULL")
     rows = cur.fetchall()
     print(f"  📊 Đọc được {len(rows)} vector từ DB")
 
@@ -32,49 +32,66 @@ def fit_scaler(version: int = 1):
         return
 
     # Parse vectors
-    vectors = []
     ids = []
+    pitch_vectors = []
+    timbre_vectors = []
     for row in rows:
         ids.append(row[0])
-        vec_str = row[1].strip("[]")
-        vec = np.fromstring(vec_str, sep=",")
-        vectors.append(vec)
+        p_str = row[1].strip("[]")
+        t_str = row[2].strip("[]")
+        pitch_vectors.append(np.fromstring(p_str, sep=","))
+        timbre_vectors.append(np.fromstring(t_str, sep=","))
 
-    matrix = np.array(vectors)  # shape = (N, D)
-    n_samples, n_dims = matrix.shape
-    print(f"  📐 Ma trận: {n_samples} mẫu × {n_dims} chiều")
+    pitch_matrix = np.array(pitch_vectors)
+    timbre_matrix = np.array(timbre_vectors)
+    
+    n_samples = len(ids)
 
-    # 2. Tính mean và std
-    mean_vec = np.mean(matrix, axis=0)
-    std_vec = np.std(matrix, axis=0)
-
-    # 3. Lưu vào scaler_params
+    # 2. Tính mean và std cho Pitch (v10)
+    p_mean = np.mean(pitch_matrix, axis=0)
+    p_std = np.std(pitch_matrix, axis=0)
     cur.execute(
         """
         INSERT INTO scaler_params (version, mean_vec, std_vec, n_dims, n_samples)
         VALUES (%s, %s, %s, %s, %s)
         ON CONFLICT (version) DO UPDATE SET
-            mean_vec = EXCLUDED.mean_vec,
-            std_vec = EXCLUDED.std_vec,
-            n_dims = EXCLUDED.n_dims,
-            n_samples = EXCLUDED.n_samples
+            mean_vec = EXCLUDED.mean_vec, std_vec = EXCLUDED.std_vec, n_dims = EXCLUDED.n_dims, n_samples = EXCLUDED.n_samples
         """,
-        (version, mean_vec.tolist(), std_vec.tolist(), n_dims, n_samples),
+        (10, p_mean.tolist(), p_std.tolist(), 3, n_samples),
     )
-    print(f"  💾 Đã lưu scaler v{version} vào DB")
+    print("  💾 Đã lưu scaler Pitch (v10)")
 
-    # 4. Chuẩn hóa lại tất cả vectors (Z-Score + L2)
-    std_safe = np.where(std_vec == 0, 1.0, std_vec)
-    normalized = (matrix - mean_vec) / std_safe
-    norms = np.linalg.norm(normalized, axis=1, keepdims=True)
-    norms = np.where(norms == 0, 1.0, norms)
-    normalized = normalized / norms
+    # 3. Tính mean và std cho Timbre (v11)
+    t_mean = np.mean(timbre_matrix, axis=0)
+    t_std = np.std(timbre_matrix, axis=0)
+    cur.execute(
+        """
+        INSERT INTO scaler_params (version, mean_vec, std_vec, n_dims, n_samples)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (version) DO UPDATE SET
+            mean_vec = EXCLUDED.mean_vec, std_vec = EXCLUDED.std_vec, n_dims = EXCLUDED.n_dims, n_samples = EXCLUDED.n_samples
+        """,
+        (11, t_mean.tolist(), t_std.tolist(), 18, n_samples),
+    )
+    print("  💾 Đã lưu scaler Timbre (v11)")
 
-    # 5. UPDATE lại DB
+    # 4. Chuẩn hóa Pitch (Chỉ Z-Score)
+    p_std_safe = np.where(p_std == 0, 1.0, p_std)
+    norm_pitch = (pitch_matrix - p_mean) / p_std_safe
+
+    # 5. Chuẩn hóa Timbre (Z-Score + L2)
+    t_std_safe = np.where(t_std == 0, 1.0, t_std)
+    z_timbre = (timbre_matrix - t_mean) / t_std_safe
+    t_norms = np.linalg.norm(z_timbre, axis=1, keepdims=True)
+    t_norms = np.where(t_norms == 0, 1.0, t_norms)
+    norm_timbre = z_timbre / t_norms
+
+    # 6. UPDATE lại DB
+    print("  🔄 Bắt đầu cập nhật lại DB...")
     for i, row_id in enumerate(ids):
         cur.execute(
-            f"UPDATE audio_files SET {col} = %s WHERE id = %s",
-            (normalized[i].tolist(), row_id),
+            "UPDATE audio_files SET pitch_vector = %s, timbre_vector = %s WHERE id = %s",
+            (norm_pitch[i].tolist(), norm_timbre[i].tolist(), row_id),
         )
         if (i + 1) % 100 == 0:
             print(f"  ✅ Đã chuẩn hóa {i + 1}/{n_samples} vector...")
@@ -83,11 +100,8 @@ def fit_scaler(version: int = 1):
     conn.commit()
     cur.close()
     conn.close()
-    print(f"  🎉 HOÀN TẤT: Đã chuẩn hóa {n_samples} vector (version={version})")
+    print(f"  🎉 HOÀN TẤT: Đã chuẩn hóa Multi-Vector cho {n_samples} bản ghi.")
 
 
 if __name__ == "__main__":
-    v = 1
-    if len(sys.argv) > 1:
-        v = int(sys.argv[1])
-    fit_scaler(version=v)
+    fit_scaler()

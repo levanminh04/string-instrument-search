@@ -7,25 +7,35 @@ from backend.database import get_connection
 from backend.config import TOP_K
 
 
-def search_similar(query_vector: np.ndarray, top_k: int = TOP_K) -> dict:
+def search_similar(pitch_vector: np.ndarray, timbre_vector: np.ndarray, top_k: int = TOP_K) -> dict:
     """
-    Tìm top-K file âm thanh giống nhất bằng Cosine Similarity (23 chiều).
+    Tìm top-K file bằng Filter-and-Rank:
+    1. Lọc top 50 nốt nhạc gần nhất (Euclidean trên pitch_vector)
+    2. Xếp hạng top K âm sắc giống nhất (Cosine trên timbre_vector)
     """
-    col = "feature_vector"
-
     query_str = f"""
+        WITH pitch_filtered AS (
+            SELECT
+                id, file_name, instrument, technique, pitch, dynamics, string_id,
+                pitch_vector, timbre_vector,
+                (pitch_vector <-> %s::vector) as pitch_dist
+            FROM audio_files
+            WHERE pitch_vector IS NOT NULL AND timbre_vector IS NOT NULL
+            ORDER BY pitch_vector <-> %s::vector
+            LIMIT 50
+        )
         SELECT
             id, file_name, instrument, technique, pitch, dynamics, string_id,
-            1 - ({col} <=> %s::vector) AS similarity,
-            {col}::text AS feature_vector_text
-        FROM audio_files
-        WHERE {col} IS NOT NULL
-        ORDER BY {col} <=> %s::vector
+            1 - (timbre_vector <=> %s::vector) AS similarity,
+            pitch_vector::text AS pitch_vector_text,
+            timbre_vector::text AS timbre_vector_text
+        FROM pitch_filtered
+        ORDER BY timbre_vector <=> %s::vector
         LIMIT %s;
     """
 
-    vec_list = query_vector.tolist()
-    vec_str = str(vec_list)
+    p_vec_str = str(pitch_vector.tolist())
+    t_vec_str = str(timbre_vector.tolist())
 
     start = time.perf_counter()
     conn = get_connection()
@@ -33,14 +43,14 @@ def search_similar(query_vector: np.ndarray, top_k: int = TOP_K) -> dict:
         from psycopg2.extras import RealDictCursor
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SET hnsw.ef_search = 400;")
-            cur.execute(query_str, (vec_str, vec_str, top_k))
+            cur.execute(query_str, (p_vec_str, p_vec_str, t_vec_str, t_vec_str, top_k))
             results = cur.fetchall()
             
-            # Chạy vòng lặp để chuyển string '[0.1, 0.2, ...]' thành list(float) cho JSON
             for row in results:
-                vec_str = row['feature_vector_text'].strip('[]')
-                row['feature_vector'] = [float(x) for x in vec_str.split(',')]
-                del row['feature_vector_text']  # Xóa cột text dư thừa
+                p_text = row.pop('pitch_vector_text', '[]')
+                t_text = row.pop('timbre_vector_text', '[]')
+                row['pitch_vector'] = [float(x) for x in p_text.strip('[]').split(',')] if p_text != '[]' else []
+                row['timbre_vector'] = [float(x) for x in t_text.strip('[]').split(',')] if t_text != '[]' else []
     finally:
         conn.close()
     elapsed_ms = (time.perf_counter() - start) * 1000

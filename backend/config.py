@@ -38,16 +38,17 @@ SKIP_SECONDS = 0.0       # Lấy từ đầu để bắt Attack Time
 EXTRACT_SECONDS = 3.0    
 
 # ============================================================
-# Feature Vector (Lý tưởng hóa cho TinySOL)
+# Feature Vector (Multi-Vector Architecture)
 # ============================================================
-VECTOR_DIM_V1 = 22       # Đã tinh gọn (Loại bỏ Attack Time không ổn định)
+PITCH_DIM = 3
+TIMBRE_DIM = 18
 
-FEATURE_NAMES_V1 = [
+FEATURE_NAMES_PITCH = ["f0_midi", "f0_midi", "f0_midi"]
+
+FEATURE_NAMES_TIMBRE = [
     *[f"mfcc_mean_{i}" for i in range(1, 11)],  # [0-9]   MFCC Mean C1-C10
-    "f0_midi", "f0_midi", "f0_midi",             # [10-12] F0 MIDI x3
-    "rms_mean",                                  # [13]    RMS Mean
-    *[f"contrast_{i}" for i in range(1, 5)],     # [14-17] Spectral Contrast B1-B4
-    *[f"mfcc_std_{i}" for i in range(1, 5)],     # [18-21] MFCC Std C1-C4
+    *[f"contrast_{i}" for i in range(1, 5)],     # [10-13] Spectral Contrast B1-B4
+    *[f"mfcc_std_{i}" for i in range(1, 5)],     # [14-17] MFCC Std C1-C4
 ]
 
 # ============================================================
