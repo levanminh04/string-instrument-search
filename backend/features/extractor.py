@@ -37,7 +37,7 @@ def extract_feature_vector(file_path: str, version: int = 2) -> tuple[np.ndarray
     f0_midi = float(librosa.hz_to_midi(f0_hz)) if f0_hz > 0 else 0.0
 
     # --------- Bước 3: Ghép Vector ---------
-    pitch_vector = np.array([f0_midi, f0_midi, f0_midi], dtype=np.float32)
+    pitch_vector = np.array([f0_midi], dtype=np.float32)
     
     timbre_vector = np.concatenate([
         mfcc_mean[1:11],        # 10 chiều: MFCC Mean C1-C10 (bỏ C0=log energy)

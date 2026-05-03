@@ -9,6 +9,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from backend.database import get_connection
+from backend.config import PITCH_DIM
 
 
 def fit_scaler():
@@ -57,7 +58,7 @@ def fit_scaler():
         ON CONFLICT (version) DO UPDATE SET
             mean_vec = EXCLUDED.mean_vec, std_vec = EXCLUDED.std_vec, n_dims = EXCLUDED.n_dims, n_samples = EXCLUDED.n_samples
         """,
-        (10, p_mean.tolist(), p_std.tolist(), 3, n_samples),
+        (10, p_mean.tolist(), p_std.tolist(), PITCH_DIM, n_samples),
     )
     print("  💾 Đã lưu scaler Pitch (v10)")
 

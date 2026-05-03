@@ -40,10 +40,10 @@ EXTRACT_SECONDS = 3.0
 # ============================================================
 # Feature Vector (Multi-Vector Architecture)
 # ============================================================
-PITCH_DIM = 3
+PITCH_DIM = 1
 TIMBRE_DIM = 18
 
-FEATURE_NAMES_PITCH = ["f0_midi", "f0_midi", "f0_midi"]
+FEATURE_NAMES_PITCH = ["f0_midi"]
 
 FEATURE_NAMES_TIMBRE = [
     *[f"mfcc_mean_{i}" for i in range(1, 11)],  # [0-9]   MFCC Mean C1-C10

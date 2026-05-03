@@ -155,17 +155,17 @@ function renderFullEQBoard(inVec, outVec) {
     // 2. TIMBRE PILLAR - MFCC MEAN (10D)
     html += `<div class="eq-category"><div class="category-title"><i class="fa-solid fa-fingerprint"></i> Timbre: Spectral Envelope (MFCC)</div>`;
     for (let i = 0; i < 10; i++) {
-        html += genRow(`MFCC Mean ${i + 1}`, inVec[3 + i], outVec[3 + i]);
+        html += genRow(`MFCC Mean ${i + 1}`, inVec[1 + i], outVec[1 + i]);
     }
     html += `</div>`;
 
     // 3. TIMBRE PILLAR - TEXTURE (8D)
     html += `<div class="eq-category"><div class="category-title"><i class="fa-solid fa-braille"></i> Timbre: Texture & contrast</div>`;
     for (let i = 0; i < 4; i++) {
-        html += genRow(`Spectral Contrast B${i + 1}`, inVec[13 + i], outVec[13 + i]);
+        html += genRow(`Spectral Contrast B${i + 1}`, inVec[11 + i], outVec[11 + i]);
     }
     for (let i = 0; i < 4; i++) {
-        html += genRow(`MFCC Std ${i + 1}`, inVec[17 + i], outVec[17 + i]);
+        html += genRow(`MFCC Std ${i + 1}`, inVec[15 + i], outVec[15 + i]);
     }
     html += `</div>`;
 

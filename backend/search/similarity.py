@@ -30,7 +30,7 @@ def search_similar(pitch_vector: np.ndarray, timbre_vector: np.ndarray, top_k: i
             pitch_vector::text AS pitch_vector_text,
             timbre_vector::text AS timbre_vector_text
         FROM pitch_filtered
-        ORDER BY timbre_vector <=> %s::vector
+        ORDER BY (pitch_dist * 5.0) + (timbre_vector <=> %s::vector) ASC
         LIMIT %s;
     """
 
