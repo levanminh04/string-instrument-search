@@ -14,23 +14,16 @@ def search_similar(pitch_vector: np.ndarray, timbre_vector: np.ndarray, top_k: i
     2. Xếp hạng top K âm sắc giống nhất (Cosine trên timbre_vector)
     """
     query_str = f"""
-        WITH pitch_filtered AS (
-            SELECT
-                id, file_name, instrument, technique, pitch, dynamics, string_id,
-                pitch_vector, timbre_vector,
-                (pitch_vector <-> %s::vector) as pitch_dist
-            FROM audio_files
-            WHERE pitch_vector IS NOT NULL AND timbre_vector IS NOT NULL
-            ORDER BY pitch_vector <-> %s::vector
-            LIMIT 50
-        )
         SELECT
             id, file_name, instrument, technique, pitch, dynamics, string_id,
-            1 - (timbre_vector <=> %s::vector) AS similarity,
             pitch_vector::text AS pitch_vector_text,
-            timbre_vector::text AS timbre_vector_text
-        FROM pitch_filtered
-        ORDER BY (pitch_dist * 5.0) + (timbre_vector <=> %s::vector) ASC
+            timbre_vector::text AS timbre_vector_text,
+            (pitch_vector <-> %s::vector) as p_dist,
+            (timbre_vector <=> %s::vector) as t_dist,
+            ((pitch_vector <-> %s::vector) * 5.0) + (timbre_vector <=> %s::vector) AS total_score
+        FROM audio_files
+        WHERE pitch_vector IS NOT NULL AND timbre_vector IS NOT NULL
+        ORDER BY total_score ASC
         LIMIT %s;
     """
 
@@ -43,10 +36,13 @@ def search_similar(pitch_vector: np.ndarray, timbre_vector: np.ndarray, top_k: i
         from psycopg2.extras import RealDictCursor
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SET hnsw.ef_search = 400;")
-            cur.execute(query_str, (p_vec_str, p_vec_str, t_vec_str, t_vec_str, top_k))
+            cur.execute(query_str, (p_vec_str, t_vec_str, p_vec_str, t_vec_str, top_k))
             results = cur.fetchall()
             
             for row in results:
+                # Trả về giá trị thập phân (0.0 - 1.0), Frontend sẽ tự nhân 100 để hiển thị %
+                row['similarity'] = max(0, 1 - row['total_score'])
+                
                 p_text = row.pop('pitch_vector_text', '[]')
                 t_text = row.pop('timbre_vector_text', '[]')
                 row['pitch_vector'] = [float(x) for x in p_text.strip('[]').split(',')] if p_text != '[]' else []

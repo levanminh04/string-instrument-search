@@ -10,9 +10,12 @@ from backend.features.extractor import extract_feature_vector
 from backend.search.normalizer import normalize_pitch, normalize_timbre
 
 def test():
+    # Tự động xác định thư mục gốc của project
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    
     # 1. File test gây lỗi trước đó
-    test_file = os.path.join("uploads", "Va+S-ord-A#3-ff-3c-N.wav")
-    if not os.path.exists(test_file):
+    test_file = os.path.join(BASE_DIR, "uploads", "Va-pont-A#3-mf-3c-N.wav")
+    if not os.path.exists(test_file): 
         print(f"❌ Không tìm thấy file {test_file}. Hãy đảm bảo bạn đã upload file này.")
         return
 

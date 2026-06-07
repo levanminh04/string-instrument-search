@@ -22,7 +22,7 @@ def load_and_preprocess(file_path: str, skip_seconds: float = SKIP_SECONDS, extr
     # 2. Trim silence ở 2 đầu
     y, _ = librosa.effects.trim(y, top_db=TRIM_TOP_DB)
 
-    # 3. Bỏ qua 1s đầu và lấy 3s tiếp theo như bạn yêu cầu
+    # 3. Bỏ qua 1s đầu và lấy 3s tiếp theo 
     start_sample = int(skip_seconds * sr)
     end_sample = start_sample + int(extract_seconds * sr)
 

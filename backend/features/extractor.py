@@ -5,7 +5,6 @@ import numpy as np
 import librosa
 from backend.features.preprocessor import load_and_preprocess
 from backend.features.temporal import (
-    compute_attack_time,
     compute_rms_mean,
     compute_f0_median,
 )

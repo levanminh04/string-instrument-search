@@ -48,12 +48,13 @@ LIMIT 20; -- Bạn có thể tăng Limit để xem nhiều hơn
     return sql_dbeaver
 
 if __name__ == "__main__":
-    # Bạn hãy đổi đường dẫn file ở đây để test các file trong thư mục strings của bạn
-    # Ví dụ: path = r"C:\path\to\your\strings\file.wav"
+    # Tự động xác định thư mục gốc của project
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
     if len(sys.argv) > 1:
         path = sys.argv[1]
     else:
         # File mặc định để bạn test thử ngay lập tức
-        path = os.path.join("uploads", "Va+S-ord-C#4-mf-3c-T14u.wav")
+        path = os.path.join(BASE_DIR, "uploads", "Gtr-ord-A#3-ff-3c-N.wav")
         
     generate_test_sql(path)

@@ -63,7 +63,7 @@ async function handleFile(file) {
 
     // Log
     await logToTerminal(`[Sys] Analyzing: ${file.name}`, 100);
-    await logToTerminal(`[DSP] Separation: Pitch (3D) & Timbre (18D)...`, 200);
+    await logToTerminal(`[DSP] Separation: Pitch (1D) & Timbre (18D)...`, 200);
 
     const formData = new FormData();
     formData.append('file', file);
@@ -131,14 +131,14 @@ function renderResults() {
     resultsList.innerHTML = html;
 
     if (currentResults.length > 0) {
-        const inVec = [...currentQueryData.pitch_vector, ...currentQueryData.timbre_vector];
-        const outVec = [...currentResults[0].pitch_vector, ...currentResults[0].timbre_vector];
+        const inVec = [...(currentQueryData.pitch_vector || []), ...(currentQueryData.timbre_vector || [])];
+        const outVec = [...(currentResults[0].pitch_vector || []), ...(currentResults[0].timbre_vector || [])];
         renderFullEQBoard(inVec, outVec);
     }
 }
 
 function renderFullEQBoard(inVec, outVec) {
-    if (!inVec || inVec.length < 21) return;
+    if (!inVec || inVec.length < 19) return;
 
     let html = `
         <div class="text-muted text-sm mb-3">
@@ -147,7 +147,7 @@ function renderFullEQBoard(inVec, outVec) {
         </div>
     `;
 
-    // 1. PITCH PILLAR (3D)
+    // 1. PITCH PILLAR (1D)
     html += `<div class="eq-category"><div class="category-title"><i class="fa-solid fa-music"></i> Pitch Pillar (Exact Match)</div>`;
     html += genRow('Fundamental Pitch (F0)', inVec[0], outVec[0]);
     html += `</div>`;
@@ -174,22 +174,26 @@ function renderFullEQBoard(inVec, outVec) {
 
 function genRow(label, inVal, outVal) {
     const getBarCSS = (val) => {
-        const width = Math.min(Math.abs(val) * 14.28, 50);
-        return val >= 0 ? `left: 50%; width: ${width}%` : `right: 50%; width: ${width}%`;
+        const safeVal = val || 0;
+        const width = Math.min(Math.abs(safeVal) * 14.28, 50);
+        return safeVal >= 0 ? `left: 50%; width: ${width}%` : `right: 50%; width: ${width}%`;
     };
-    const divergeClass = Math.abs(inVal - outVal) > 0.8 ? 'fill-diverge' : '';
+    
+    const safeIn = inVal || 0;
+    const safeOut = outVal || 0;
+    const divergeClass = Math.abs(safeIn - safeOut) > 0.8 ? 'fill-diverge' : '';
 
     return `
         <div class="eq-row">
             <div class="eq-label">${label}</div>
             <div class="eq-bar-wrapper">
                 <div class="eq-center-line"></div>
-                <div class="eq-track"><div class="eq-fill fill-input" style="${getBarCSS(inVal)}"></div></div>
-                <div class="eq-track"><div class="eq-fill fill-target ${divergeClass}" style="${getBarCSS(outVal)}"></div></div>
+                <div class="eq-track"><div class="eq-fill fill-input" style="${getBarCSS(safeIn)}"></div></div>
+                <div class="eq-track"><div class="eq-fill fill-target ${divergeClass}" style="${getBarCSS(safeOut)}"></div></div>
             </div>
             <div class="eq-values">
-                <span class="text-cyan">${inVal > 0 ? '+' + inVal.toFixed(2) : inVal.toFixed(2)}</span>
-                <span class="text-purple">${outVal > 0 ? '+' + outVal.toFixed(2) : outVal.toFixed(2)}</span>
+                <span class="text-cyan">${safeIn > 0 ? '+' + safeIn.toFixed(2) : safeIn.toFixed(2)}</span>
+                <span class="text-purple">${safeOut > 0 ? '+' + safeOut.toFixed(2) : safeOut.toFixed(2)}</span>
             </div>
         </div>
     `;
@@ -216,14 +220,19 @@ function renderRawInspector() {
             <tr><td style="padding: 4px;">F0 MIDI (Pitch)</td><td style="text-align: right; color: #fff;">${q.raw_pitch[0].toFixed(2)}</td></tr>
             <tr style="background: rgba(255, 255, 255, 0.05);"><td colspan="2" style="padding: 4px; font-weight: bold;">MFCC Mean (C1-C10)</td></tr>
     `;
-    
+
     q.raw_timbre.slice(0, 10).forEach((val, i) => {
-        html += `<tr><td style="padding: 4px; padding-left: 15px;">MFCC C${i+1}</td><td style="text-align: right; color: #fff;">${val.toFixed(4)}</td></tr>`;
+        html += `<tr><td style="padding: 4px; padding-left: 15px;">MFCC C${i + 1}</td><td style="text-align: right; color: #fff;">${val.toFixed(4)}</td></tr>`;
     });
 
     html += `<tr style="background: rgba(255, 255, 255, 0.05);"><td colspan="2" style="padding: 4px; font-weight: bold;">Spectral Contrast (B1-B4)</td></tr>`;
     q.raw_timbre.slice(10, 14).forEach((val, i) => {
-        html += `<tr><td style="padding: 4px; padding-left: 15px;">Contrast B${i+1}</td><td style="text-align: right; color: #fff;">${val.toFixed(4)}</td></tr>`;
+        html += `<tr><td style="padding: 4px; padding-left: 15px;">Contrast B${i + 1}</td><td style="text-align: right; color: #fff;">${val.toFixed(4)}</td></tr>`;
+    });
+
+    html += `<tr style="background: rgba(255, 255, 255, 0.05);"><td colspan="2" style="padding: 4px; font-weight: bold;">MFCC Std (C1-C4)</td></tr>`;
+    q.raw_timbre.slice(14, 18).forEach((val, i) => {
+        html += `<tr><td style="padding: 4px; padding-left: 15px;">MFCC Std ${i+1}</td><td style="text-align: right; color: #fff;">${val.toFixed(4)}</td></tr>`;
     });
 
     html += `</table>`;
@@ -238,8 +247,8 @@ playInputBtn.addEventListener('click', () => {
 function selectResult(index) {
     document.querySelectorAll('.match-card').forEach(c => c.classList.remove('active'));
     document.getElementById(`result-card-${index}`).classList.add('active');
-    const inVec = [...currentQueryData.pitch_vector, ...currentQueryData.timbre_vector];
-    const outVec = [...currentResults[index].pitch_vector, ...currentResults[index].timbre_vector];
+    const inVec = [...(currentQueryData.pitch_vector || []), ...(currentQueryData.timbre_vector || [])];
+    const outVec = [...(currentResults[index].pitch_vector || []), ...(currentResults[index].timbre_vector || [])];
     renderFullEQBoard(inVec, outVec);
 }
 

@@ -6,7 +6,7 @@ import os
 # ============================================================
 # Database PostgreSQL
 # ============================================================
-DB_HOST = os.getenv("DB_HOST", "13.239.118.235")
+DB_HOST = os.getenv("DB_HOST", "15.134.248.39")
 DB_PORT = os.getenv("DB_PORT", "5432")
 DB_NAME = os.getenv("DB_NAME", "audiostring_db")
 DB_USER = os.getenv("DB_USER", "user1")
@@ -34,7 +34,7 @@ HOP_SIZE = 512
 N_MELS = 40
 N_MFCC = 13
 TRIM_TOP_DB = 60         # NGƯỠNG NHẠY: Bắt được cả tiếng miết vĩ siêu nhẹ (TinySOL)
-SKIP_SECONDS = 0.0       # Lấy từ đầu để bắt Attack Time
+SKIP_SECONDS = 0.0       # Lấy từ đầu (sau trim silence) để bắt trọn tín hiệu nốt nhạc
 EXTRACT_SECONDS = 3.0    
 
 # ============================================================
